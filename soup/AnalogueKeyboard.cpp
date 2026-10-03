@@ -320,7 +320,7 @@ NAMESPACE_SOUP
 	// The board's command numbers, as they go in a query's second byte.
 	enum RongyuanCommand : uint8_t
 	{
-		RONGYUAN_MAGNETISM = 0x1B,
+		RONGYUAN_MAGNETIC_AXIS_TRAVEL = 0x1B,
 		RONGYUAN_KEY_MAP = 0x8A,
 		RONGYUAN_SETTINGS = 0xE5,
 	};
@@ -358,7 +358,7 @@ NAMESPACE_SOUP
 	struct RongyuanTravelReport
 	{
 		uint8_t report_id;   // 5
-		uint8_t marker;      // 0x1B, the magnetism command's own number
+		uint8_t marker;      // 0x1B, the magnetic-axis travel command's own number
 		uint16_t travel;     // little-endian; about 810 at a slam
 		uint8_t position;    // the key map's slot index
 	};
@@ -1470,7 +1470,7 @@ if (combined[i]) \
 			rongyuan.state = 1;
 
 			const RongyuanQuery query{
-				.command = RONGYUAN_MAGNETISM,
+				.command = RONGYUAN_MAGNETIC_AXIS_TRAVEL,
 				.arguments = { 0x01 },
 			};
 			cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query));
@@ -1511,7 +1511,7 @@ if (combined[i]) \
 				RongyuanTravelReport travel_report;
 				memcpy(&travel_report, report.data(), sizeof(travel_report));
 				const size_t position = travel_report.position;
-				if (travel_report.marker == RONGYUAN_MAGNETISM
+				if (travel_report.marker == RONGYUAN_MAGNETIC_AXIS_TRAVEL
 					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 				{
 					const Key sk = rongyuan.layout[position];
