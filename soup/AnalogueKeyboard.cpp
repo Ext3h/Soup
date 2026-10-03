@@ -313,6 +313,33 @@ NAMESPACE_SOUP
 		return {};
 	}
 
+#pragma pack(push, 1)
+	// One key's travel, as the board streams it.
+	struct RongyuanTravelReport
+	{
+		uint8_t report_id;   // 5
+		uint8_t marker;      // 0x1B, the magnetism command's own number
+		uint16_t travel;     // little-endian; about 810 at a slam
+		uint8_t position;    // the key map's slot index
+	};
+
+	// One slot of the key map: a type tag, a modifier, a HID usage, a combo.
+	struct RongyuanKeyRecord
+	{
+		uint8_t type;
+		uint8_t modifier;
+		uint8_t usage;
+		uint8_t combo;
+	};
+
+	// One page of the per-key settings read: a report id, then 32 values.
+	struct RongyuanSettingsPage
+	{
+		uint8_t report_id;
+		uint16_t values[32];
+	};
+#pragma pack(pop)
+
 	// Report id 0, up to seven command bytes, checksum at byte 8 = 255 minus their sum, zero-padded to the report length.
 	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, const uint8_t* command, size_t size)
 	{
@@ -369,9 +396,14 @@ NAMESPACE_SOUP
 	{
 		const uint8_t request[] = { 0xE5, 0x00, 0x01, 0x00 };
 		const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, request, COUNT(request)));
-		for (size_t i = 1; i + 1 < reply.size(); i += 2)
+		if (reply.size() < sizeof(RongyuanSettingsPage))
 		{
-			if ((reply.at(i) | (reply.at(i + 1) << 8)) != 0xFFFF)
+			return false;
+		}
+		const auto& page = *reinterpret_cast<const RongyuanSettingsPage*>(reply.data());
+		for (const uint16_t value : page.values)
+		{
+			if (value != 0xFFFF)
 			{
 				return true;
 			}
@@ -398,17 +430,17 @@ NAMESPACE_SOUP
 				{
 					return true;
 				}
-				const uint8_t usage = reply.at(1 + i * 4 + 2);
+				const auto& record = *reinterpret_cast<const RongyuanKeyRecord*>(reply.data() + 1 + i * sizeof(RongyuanKeyRecord));
 
 				// A record that is not empty but carries no usage is Fn.
-				if (usage == 0)
+				if (record.usage == 0)
 				{
-					const bool has_record = reply.at(1 + i * 4) != 0 || reply.at(1 + i * 4 + 1) != 0;
+					const bool has_record = record.type != 0 || record.modifier != 0;
 					layout[position] = has_record ? KEY_FN : KEY_NONE;
 				}
 				else
 				{
-					layout[position] = hid_scancode_to_soup_key(usage);
+					layout[position] = hid_scancode_to_soup_key(record.usage);
 				}
 			}
 		}
@@ -1415,18 +1447,16 @@ if (combined[i]) \
 		{
 			disconnected = true;
 		}
-		else if (report.size() >= 5
-			&& report.at(0) == 5 // report id 5, 0x1B at 1, travel u16 LE at 2, position at 4
-			&& report.at(1) == 0x1B
-			)
+		else if (report.size() >= sizeof(RongyuanTravelReport))
 		{
-			const uint8_t position = report.at(4);
-			if (position < NUM_KEYS && rongyuan.layout[position] != KEY_NONE)
+			const auto& travel_report = *reinterpret_cast<const RongyuanTravelReport*>(report.data());
+			const uint8_t position = travel_report.position;
+			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
+				&& position < NUM_KEYS && rongyuan.layout[position] != KEY_NONE)
 			{
-				const uint16_t travel = static_cast<uint16_t>(report.at(2) | (report.at(3) << 8));
-				rongyuan.buffer[position] = travel < 5
+				rongyuan.buffer[position] = travel_report.travel < 5
 					? 0
-					: static_cast<uint8_t>(std::min(travel * 255u / 810u, 255u)); // 810 is what a slam reaches
+					: static_cast<uint8_t>(std::min(travel_report.travel * 255u / 810u, 255u));
 			}
 		}
 
