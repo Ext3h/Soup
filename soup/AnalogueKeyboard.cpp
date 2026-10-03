@@ -438,8 +438,13 @@ NAMESPACE_SOUP
 		return false;
 	}
 
+	// The key map read asks for eight pages of sixteen four-byte records.
+	static constexpr size_t RONGYUAN_PAGES = 8;
+	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
+	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE == AnalogueKeyboard::RONGYUAN_POSITIONS);
+
 	// Fills `layout` from the board's own key map; false when a page does not answer.
-	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key (&layout)[RONGYUAN_POSITIONS])
+	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key (&layout)[AnalogueKeyboard::RONGYUAN_POSITIONS])
 	{
 		for (size_t page = 0; page != RONGYUAN_PAGES; ++page)
 		{
