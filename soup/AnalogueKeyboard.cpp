@@ -339,7 +339,7 @@ NAMESPACE_SOUP
 			uint8_t bytes[8];
 			memcpy(bytes, this, sizeof(bytes));
 			uint8_t sum = 0;
-			for (uint8_t i = 1; i != 8; ++i)
+			for (size_t i = 1; i != sizeof(bytes); ++i)
 			{
 				sum += bytes[i];
 			}
