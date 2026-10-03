@@ -343,7 +343,9 @@ NAMESPACE_SOUP
 	};
 #pragma pack(pop)
 
-	// Report id 0, up to seven command bytes, checksum at byte 8 = 255 minus their sum, zero-padded to the report length.
+	// Report id 0, up to seven command bytes, checksum at byte 8 = 255 minus their sum, zero-padded to the report
+	// length. Every implementation of this family's protocol found so far - the vendor's own, and three others
+	// reverse-engineered independently - uses the same position and the same arithmetic.
 	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, const uint8_t* command, size_t size)
 	{
 		SOUP_ASSERT(size <= 7);
