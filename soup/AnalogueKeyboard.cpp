@@ -439,7 +439,7 @@ NAMESPACE_SOUP
 	}
 
 	// Fills `layout` from the board's own key map; false when a page does not answer.
-	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key* layout)
+	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key (&layout)[NUM_KEYS])
 	{
 		for (uint8_t page = 0; page != 8; ++page) // eight pages, sixteen records each
 		{
