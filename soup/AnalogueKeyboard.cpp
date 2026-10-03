@@ -304,11 +304,9 @@ NAMESPACE_SOUP
 	{
 		for (auto& cmd : hwHid::getAll())
 		{
-			if (cmd.vendor_id == kbd.vendor_id
-				&& cmd.product_id == kbd.product_id
+			if (cmd.isSamePhysicalDeviceAs(kbd)
 				&& cmd.usage_page == 0xFFFF
 				&& cmd.usage == 0x0002
-				&& cmd.havePermission()
 				)
 			{
 				return std::move(cmd);
@@ -1508,7 +1506,7 @@ if (combined[i]) \
 			SOUP_IF_UNLIKELY (report.empty())
 			{
 				disconnected = true;
-				break;
+				return keys;
 			}
 			if (report.size() >= sizeof(RongyuanTravelReport))
 			{
