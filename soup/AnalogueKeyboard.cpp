@@ -203,9 +203,8 @@ NAMESPACE_SOUP
 			}
 		}
 		// RongYuan, the Yichip-based magnetic keyboards: GamaKay, Attack Shark, Akko and others.
-		// 0x3151 is Royuan's own vendor id, the one their white-label brands ship under. The family also
-		// appears under other vendor ids, and which board a device is gets settled at setup, by the
-		// settings gate and the key map read.
+		// 0x3151 is the vendor's own id, the one their white-label brands ship under; the product string
+		// names the board.
 		else if (hid.vendor_id == 0x3151)
 		{
 			if (hid.usage_page == 0xFFFF && hid.usage == 0x0001)
@@ -357,7 +356,7 @@ NAMESPACE_SOUP
 	{
 		uint8_t report_id;   // 5
 		uint8_t marker;      // 0x1B, the magnetic-axis travel command's own number
-		uint16_t travel;     // little-endian; about 810 at a slam
+		uint16_t travel;     // little-endian
 		uint8_t position;    // the key map's slot index
 	};
 
@@ -1458,14 +1457,26 @@ if (combined[i]) \
 		return keys;
 	}
 
+	// state: 0 = not set up, 1 = set up, 2 = the settings read found no analogue switch. Any other value
+	// is the reason the last attempt failed: the next call retries those, and a reason is logged only
+	// the first time it occurs. Setup finds the command collection by opening every HID interface in the
+	// system, a cost every retry pays again.
 	static void rongyuanSetup(AnalogueKeyboard& kbd)
 	{
-		kbd.rongyuan.state = 2;
 		memset(kbd.rongyuan.buffer, 0, sizeof(kbd.rongyuan.buffer));
+
+		const auto fail = [&kbd](uint8_t reason, const char* message)
+		{
+			if (kbd.rongyuan.state != reason)
+			{
+				logWriteLine(message);
+			}
+			kbd.rongyuan.state = reason;
+		};
 
 		if (!kbd.hid.hasReportId(RONGYUAN_INPUT_REPORT))
 		{
-			logWriteLine("RongYuan: the analogue collection declares no report 5; the keyboard will report no keys.");
+			fail(3, "RongYuan: setup could not find report 5 in the analogue collection; retrying.");
 			return;
 		}
 
@@ -1474,33 +1485,44 @@ if (combined[i]) \
 #endif
 
 		hwHid cmd = rongyuanCommandChannel(kbd.hid);
-		if (cmd.isValid()
-			&& rongyuanIsMagnetic(cmd)
-			&& rongyuanReadKeyMap(cmd, kbd.rongyuan.layout)
-			)
+		if (!cmd.isValid())
 		{
-			kbd.rongyuan.state = 1;
+			fail(4, "RongYuan: setup found no command collection on the keyboard; retrying.");
+			return;
+		}
 
-			const RongyuanQuery query{
-				.command = RONGYUAN_MAGNETIC_AXIS_TRAVEL,
-				.arguments = { 0x01 },
-			};
-			cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query));
-		}
-		else
+		if (!rongyuanIsMagnetic(cmd))
 		{
-			logWriteLine("RongYuan: no key map was read; the keyboard will report no keys.");
+			fail(2, "RongYuan: the settings read found no analogue switch; the keyboard will report no keys.");
+			return;
 		}
+
+		if (!rongyuanReadKeyMap(cmd, kbd.rongyuan.layout))
+		{
+			fail(5, "RongYuan: setup did not read the whole key map; retrying.");
+			return;
+		}
+
+		const RongyuanQuery query{
+			.command = RONGYUAN_MAGNETIC_AXIS_TRAVEL,
+			.arguments = { 0x01 },
+		};
+		if (!cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query)))
+		{
+			fail(6, "RongYuan: the keyboard did not accept the magnetic-axis start command; retrying.");
+			return;
+		}
+
+		kbd.rongyuan.state = 1;
 	}
 
-	// The travel count a slam reaches on this board; nothing measured goes past it.
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
 
 	std::vector<ActiveKey> AnalogueKeyboard::getActiveKeysRongyuan()
 	{
 		std::vector<ActiveKey> keys{};
 
-		if (rongyuan.state == 0)
+		if (rongyuan.state != 1 && rongyuan.state != 2)
 		{
 			rongyuanSetup(*this);
 		}
