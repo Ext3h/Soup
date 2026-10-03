@@ -111,6 +111,5 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysNuphy();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysMadlions();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysRongyuan();
-		void rongyuanSetup();
 	};
 }

@@ -1450,24 +1450,24 @@ if (combined[i]) \
 		return keys;
 	}
 
-	void AnalogueKeyboard::rongyuanSetup()
+	static void rongyuanSetup(AnalogueKeyboard& kbd)
 	{
-		rongyuan.state = 2;
-		memset(rongyuan.buffer, 0, sizeof(rongyuan.buffer));
+		kbd.rongyuan.state = 2;
+		memset(kbd.rongyuan.buffer, 0, sizeof(kbd.rongyuan.buffer));
 
-		if (!hid.hasReportId(RONGYUAN_INPUT_REPORT))
+		if (!kbd.hid.hasReportId(RONGYUAN_INPUT_REPORT))
 		{
 			logWriteLine("RongYuan: the analogue collection declares no report 5; the keyboard will report no keys.");
 			return;
 		}
 
-		hwHid cmd = rongyuanCommandChannel(hid);
+		hwHid cmd = rongyuanCommandChannel(kbd.hid);
 		if (cmd.isValid()
 			&& rongyuanIsMagnetic(cmd)
-			&& rongyuanReadKeyMap(cmd, rongyuan.layout)
+			&& rongyuanReadKeyMap(cmd, kbd.rongyuan.layout)
 			)
 		{
-			rongyuan.state = 1;
+			kbd.rongyuan.state = 1;
 
 			const RongyuanQuery query{
 				.command = RONGYUAN_MAGNETIC_AXIS_TRAVEL,
@@ -1490,7 +1490,7 @@ if (combined[i]) \
 
 		if (rongyuan.state == 0)
 		{
-			rongyuanSetup();
+			rongyuanSetup(*this);
 		}
 		if (rongyuan.state != 1)
 		{
