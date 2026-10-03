@@ -323,7 +323,7 @@ NAMESPACE_SOUP
 	};
 
 	// The analogue collection's input report id; setup checks the descriptor declares it, and byte 1 tells reports apart.
-	static constexpr uint8_t RONGYUAN_INPUT_REPORT = 5;
+	static constexpr uint8_t RONGYUAN_INPUT_REPORT_ID = 5;
 	// The key map read asks for eight pages of sixteen four-byte records.
 	static constexpr size_t RONGYUAN_PAGES = 8;
 	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
@@ -357,10 +357,10 @@ NAMESPACE_SOUP
 		uint8_t report_id;   // 5
 		uint8_t marker;      // 0x1B, the magnetic-axis travel command's own number
 		uint16_t travel;     // little-endian
-		uint8_t position;    // the key map's slot index
+		uint8_t position;    // matrix position, col * 6 + row
 	};
 
-	// One slot of the key map: a type tag, a modifier, a HID usage, a combo.
+	// One key map position: a type tag, a modifier, a HID usage, a combo.
 	struct RongyuanKeyRecord
 	{
 		uint8_t type;
@@ -1457,15 +1457,25 @@ if (combined[i]) \
 		return keys;
 	}
 
-	// state: 0 = not set up, 1 = set up, 2 = the settings read found no analogue switch. Any other value
-	// is the reason the last attempt failed: the next call retries those, and a reason is logged only
-	// the first time it occurs. Setup finds the command collection by opening every HID interface in the
-	// system, a cost every retry pays again.
+	// The setup's progress, held in AnalogueKeyboard::rongyuan.state; the constructor zeroes that
+	// storage, so not-tried stays first. A failure reason retries on the next call and is logged
+	// once; setup finds the command collection by opening every HID interface in the system.
+	enum RongyuanSetupState : uint8_t
+	{
+		RONGYUAN_NOT_TRIED,
+		RONGYUAN_READY,
+		RONGYUAN_NO_ANALOGUE_SWITCH, // terminal; the settings read found no analogue switch
+		RONGYUAN_NO_REPORT_5,
+		RONGYUAN_NO_COMMAND_CHANNEL,
+		RONGYUAN_NO_KEY_MAP,
+		RONGYUAN_START_REJECTED,
+	};
+
 	static void rongyuanSetup(AnalogueKeyboard& kbd)
 	{
 		memset(kbd.rongyuan.buffer, 0, sizeof(kbd.rongyuan.buffer));
 
-		const auto fail = [&kbd](uint8_t reason, const char* message)
+		const auto fail = [&kbd](RongyuanSetupState reason, const char* message)
 		{
 			if (kbd.rongyuan.state != reason)
 			{
@@ -1474,9 +1484,9 @@ if (combined[i]) \
 			kbd.rongyuan.state = reason;
 		};
 
-		if (!kbd.hid.hasReportId(RONGYUAN_INPUT_REPORT))
+		if (!kbd.hid.hasReportId(RONGYUAN_INPUT_REPORT_ID))
 		{
-			fail(3, "RongYuan: setup could not find report 5 in the analogue collection; retrying.");
+			fail(RONGYUAN_NO_REPORT_5, "RongYuan: setup could not find report 5 in the analogue collection; retrying.");
 			return;
 		}
 
@@ -1487,19 +1497,19 @@ if (combined[i]) \
 		hwHid cmd = rongyuanCommandChannel(kbd.hid);
 		if (!cmd.isValid())
 		{
-			fail(4, "RongYuan: setup found no command collection on the keyboard; retrying.");
+			fail(RONGYUAN_NO_COMMAND_CHANNEL, "RongYuan: setup found no command collection on the keyboard; retrying.");
 			return;
 		}
 
 		if (!rongyuanIsMagnetic(cmd))
 		{
-			fail(2, "RongYuan: the settings read found no analogue switch; the keyboard will report no keys.");
+			fail(RONGYUAN_NO_ANALOGUE_SWITCH, "RongYuan: the settings read found no analogue switch; the keyboard will report no keys.");
 			return;
 		}
 
 		if (!rongyuanReadKeyMap(cmd, kbd.rongyuan.layout))
 		{
-			fail(5, "RongYuan: setup did not read the whole key map; retrying.");
+			fail(RONGYUAN_NO_KEY_MAP, "RongYuan: setup did not read the whole key map; retrying.");
 			return;
 		}
 
@@ -1509,11 +1519,11 @@ if (combined[i]) \
 		};
 		if (!cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query)))
 		{
-			fail(6, "RongYuan: the keyboard did not accept the magnetic-axis start command; retrying.");
+			fail(RONGYUAN_START_REJECTED, "RongYuan: the keyboard did not accept the magnetic-axis start command; retrying.");
 			return;
 		}
 
-		kbd.rongyuan.state = 1;
+		kbd.rongyuan.state = RONGYUAN_READY;
 	}
 
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
@@ -1522,11 +1532,11 @@ if (combined[i]) \
 	{
 		std::vector<ActiveKey> keys{};
 
-		if (rongyuan.state != 1 && rongyuan.state != 2)
+		if (rongyuan.state != RONGYUAN_READY && rongyuan.state != RONGYUAN_NO_ANALOGUE_SWITCH)
 		{
 			rongyuanSetup(*this);
 		}
-		if (rongyuan.state != 1)
+		if (rongyuan.state != RONGYUAN_READY)
 		{
 			return keys;
 		}
