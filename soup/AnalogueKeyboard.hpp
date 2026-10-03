@@ -9,6 +9,11 @@
 
 NAMESPACE_SOUP
 {
+	// The key map read: eight pages of sixteen records, so the most matrix positions a board can name.
+	static constexpr uint8_t RONGYUAN_PAGES = 8;
+	static constexpr uint8_t RONGYUAN_RECORDS_PER_PAGE = 16;
+	static constexpr uint8_t RONGYUAN_POSITIONS = RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE;
+
 	struct AnalogueKeyboard
 	{
 		std::string name;
@@ -42,8 +47,8 @@ NAMESPACE_SOUP
 			struct
 			{
 				uint8_t state; // 0: not set up, 1: the board's key map, 2: no key map
-				Key layout[NUM_KEYS];
-				uint8_t buffer[NUM_KEYS];
+				Key layout[RONGYUAN_POSITIONS];
+				uint8_t buffer[RONGYUAN_POSITIONS];
 			} rongyuan;
 		};
 
