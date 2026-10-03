@@ -333,6 +333,17 @@ NAMESPACE_SOUP
 		RongyuanCommand command;
 		uint8_t arguments[6]; // command-specific, zero when unused
 		uint8_t checksum;     // the family's: 0xFF - the sum of the seven bytes before it
+
+		void updateChecksum()
+		{
+			const auto* bytes = reinterpret_cast<const uint8_t*>(this);
+			uint8_t sum = 0;
+			for (uint8_t i = 1; i != 8; ++i)
+			{
+				sum += bytes[i];
+			}
+			checksum = static_cast<uint8_t>(255 - sum);
+		}
 	};
 
 	// One key's travel, as the board streams it.
@@ -364,13 +375,7 @@ NAMESPACE_SOUP
 	// One query as a feature report the board will take.
 	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, RongyuanQuery query)
 	{
-		auto* bytes = reinterpret_cast<uint8_t*>(&query);
-		uint8_t sum = 0;
-		for (uint8_t i = 1; i != 8; ++i)
-		{
-			sum += bytes[i];
-		}
-		query.checksum = static_cast<uint8_t>(255 - sum);
+		query.updateChecksum();
 
 		Buffer<> report;
 		report.append(reinterpret_cast<const char*>(&query), sizeof(query));
