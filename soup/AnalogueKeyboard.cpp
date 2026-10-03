@@ -441,10 +441,10 @@ NAMESPACE_SOUP
 	// The key map read asks for eight pages of sixteen four-byte records.
 	static constexpr size_t RONGYUAN_PAGES = 8;
 	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
-	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE == AnalogueKeyboard::RONGYUAN_POSITIONS);
+	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE * sizeof(Key) == sizeof(AnalogueKeyboard::rongyuan.layout));
 
 	// Fills `layout` from the board's own key map; false when a page does not answer.
-	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key (&layout)[AnalogueKeyboard::RONGYUAN_POSITIONS])
+	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, decltype(AnalogueKeyboard::rongyuan.layout)& layout)
 	{
 		for (size_t page = 0; page != RONGYUAN_PAGES; ++page)
 		{
@@ -1488,7 +1488,7 @@ if (combined[i]) \
 			memcpy(&travel_report, report.data(), sizeof(travel_report));
 			const size_t position = travel_report.position;
 			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
-				&& position < RONGYUAN_POSITIONS)
+				&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 			{
 				const Key sk = rongyuan.layout[position];
 				if (sk != KEY_NONE)

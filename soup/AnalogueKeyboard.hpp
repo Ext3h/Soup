@@ -11,9 +11,6 @@ NAMESPACE_SOUP
 {
 	struct AnalogueKeyboard
 	{
-		// The most matrix positions a RongYuan key map can name.
-		static constexpr size_t RONGYUAN_POSITIONS = 128;
-
 		std::string name;
 		hwHid hid;
 		bool has_ctx_key;
@@ -44,6 +41,9 @@ NAMESPACE_SOUP
 			} madlions;
 			struct
 			{
+				// The most matrix positions a RongYuan key map can name.
+				static constexpr size_t RONGYUAN_POSITIONS = 128;
+
 				uint8_t state; // 0: not set up, 1: the board's key map, 2: no key map
 				Key layout[RONGYUAN_POSITIONS]; // matrix position -> key
 				uint8_t buffer[NUM_KEYS]; // travel, by key
