@@ -1496,9 +1496,7 @@ if (combined[i]) \
 				const Key sk = rongyuan.layout[position];
 				if (sk != KEY_NONE)
 				{
-					rongyuan.buffer[sk] = travel_report.travel < 5
-						? 0
-						: static_cast<uint8_t>(std::min(travel_report.travel * 255u / RONGYUAN_FULL_TRAVEL, 255u));
+					rongyuan.buffer[sk] = travel_report.travel < 5 ? 0 : travel_report.travel;
 				}
 			}
 		}
@@ -1509,7 +1507,7 @@ if (combined[i]) \
 			{
 				keys.emplace_back(ActiveKey{
 					static_cast<Key>(i),
-					static_cast<float>(rongyuan.buffer[i]) / 255.0f
+					std::min(static_cast<float>(rongyuan.buffer[i]) / RONGYUAN_FULL_TRAVEL, 1.0f)
 				});
 			}
 		}
