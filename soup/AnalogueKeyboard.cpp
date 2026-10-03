@@ -409,8 +409,7 @@ NAMESPACE_SOUP
 			return {};
 		}
 
-		// The write replaces what the report held and the board keeps the request there until it answers, so the
-		// answer is the first read past the request — a repeat of the same command answers byte-identically.
+		// The board keeps the request in the report until it answers, so the answer is the first read past it.
 		for (uint8_t attempt = 0; attempt != 50; ++attempt)
 		{
 			Buffer<> reply;
