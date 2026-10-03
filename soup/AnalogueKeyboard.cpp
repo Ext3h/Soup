@@ -1462,7 +1462,7 @@ if (combined[i]) \
 		}
 
 #if SOUP_WINDOWS
-		kbd.hid.setInputReportBufferCount(512);
+		kbd.hid.increaseInputReportBufferCount();
 #endif
 
 		hwHid cmd = rongyuanCommandChannel(kbd.hid);

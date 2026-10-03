@@ -134,8 +134,7 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::string getProductName() const;
 		[[nodiscard]] std::string getSerialNumber() const;
 
-		// The HID class refuses any count above 512.
-		void setInputReportBufferCount(uint32_t count) noexcept;
+		void increaseInputReportBufferCount() noexcept;
 #else
 		[[nodiscard]] const std::string& getManufacturerName() const
 		{

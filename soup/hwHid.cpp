@@ -516,11 +516,12 @@ NAMESPACE_SOUP
 		return ret;
 	}
 
-	void hwHid::setInputReportBufferCount(uint32_t count) noexcept
+	void hwHid::increaseInputReportBufferCount() noexcept
 	{
-		ULONG value = count;
+		// The HID class refuses counts above 512; it answers ERROR_INVALID_PARAMETER past that.
+		ULONG count = 512;
 		DWORD returned = 0;
-		DeviceIoControl(handle, IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS, &value, sizeof(value), &value, sizeof(value), &returned, nullptr);
+		DeviceIoControl(handle, IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS, &count, sizeof(count), &count, sizeof(count), &returned, nullptr);
 	}
 #endif
 
