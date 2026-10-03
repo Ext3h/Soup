@@ -47,8 +47,8 @@ NAMESPACE_SOUP
 			struct
 			{
 				uint8_t state; // 0: not set up, 1: the board's key map, 2: no key map
-				Key layout[RONGYUAN_POSITIONS];
-				uint8_t buffer[RONGYUAN_POSITIONS];
+				Key layout[RONGYUAN_POSITIONS]; // matrix position -> key
+				uint8_t buffer[NUM_KEYS]; // travel, by key
 			} rongyuan;
 		};
 

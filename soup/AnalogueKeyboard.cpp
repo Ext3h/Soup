@@ -1483,21 +1483,25 @@ if (combined[i]) \
 			memcpy(&travel_report, report.data(), sizeof(travel_report));
 			const size_t position = travel_report.position;
 			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
-				&& position < RONGYUAN_POSITIONS && rongyuan.layout[position] != KEY_NONE)
+				&& position < RONGYUAN_POSITIONS)
 			{
-				rongyuan.buffer[position] = travel_report.travel < 5
-					? 0
-					: static_cast<uint8_t>(std::min(travel_report.travel * 255u / 810u, 255u));
+				const Key sk = rongyuan.layout[position];
+				if (sk != KEY_NONE)
+				{
+					rongyuan.buffer[sk] = travel_report.travel < 5
+						? 0
+						: static_cast<uint8_t>(std::min(travel_report.travel * 255u / 810u, 255u));
+				}
 			}
 		}
 
-		for (size_t position = 0; position != RONGYUAN_POSITIONS; ++position)
+		for (size_t i = 0; i != NUM_KEYS; ++i)
 		{
-			if (rongyuan.buffer[position] != 0)
+			if (rongyuan.buffer[i] != 0)
 			{
 				keys.emplace_back(ActiveKey{
-					rongyuan.layout[position],
-					static_cast<float>(rongyuan.buffer[position]) / 255.0f
+					static_cast<Key>(i),
+					static_cast<float>(rongyuan.buffer[i]) / 255.0f
 				});
 			}
 		}
