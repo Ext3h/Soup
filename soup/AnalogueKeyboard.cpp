@@ -317,7 +317,24 @@ NAMESPACE_SOUP
 		return {};
 	}
 
+	// The board's command numbers, as they go in a query's second byte.
+	enum RongyuanCommand : uint8_t
+	{
+		RONGYUAN_MAGNETISM = 0x1B,
+		RONGYUAN_KEY_MAP = 0x8A,
+		RONGYUAN_SETTINGS = 0xE5,
+	};
+
 #pragma pack(push, 1)
+	// One query as the board takes it: the report id, the command and its arguments, then the checksum.
+	struct RongyuanQuery
+	{
+		uint8_t report_id;    // 0
+		RongyuanCommand command;
+		uint8_t arguments[6]; // command-specific, zero when unused
+		uint8_t checksum;     // the family's: 0xFF - the sum of the seven bytes before it
+	};
+
 	// One key's travel, as the board streams it.
 	struct RongyuanTravelReport
 	{
@@ -344,22 +361,19 @@ NAMESPACE_SOUP
 	};
 #pragma pack(pop)
 
-	// One command as a feature report the board will take.
-	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, const uint8_t* command, size_t size)
+	// One query as a feature report the board will take.
+	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, RongyuanQuery query)
 	{
-		SOUP_ASSERT(size <= 7);
-
-		Buffer<> report;
-		report.append("\0", 1); // the report id
-		report.append(command, size);
-		report.insert_back(9 - size, '\0');
+		auto* bytes = reinterpret_cast<uint8_t*>(&query);
 		uint8_t sum = 0;
 		for (uint8_t i = 1; i != 8; ++i)
 		{
-			sum += report.at(i);
+			sum += bytes[i];
 		}
-		report.at(8) = static_cast<uint8_t>(255 - sum); // the family's checksum; every implementation found puts it here
+		query.checksum = static_cast<uint8_t>(255 - sum);
 
+		Buffer<> report;
+		report.append(reinterpret_cast<const char*>(&query), sizeof(query));
 		if (report.size() < cmd.feature_report_byte_length)
 		{
 			report.insert_back(cmd.feature_report_byte_length - report.size(), '\0');
@@ -397,8 +411,11 @@ NAMESPACE_SOUP
 	// True when the board answers the per-key settings read with something other than "no switch here".
 	[[nodiscard]] static bool rongyuanIsMagnetic(hwHid& cmd)
 	{
-		const uint8_t request[] = { 0xE5, 0x00, 0x01, 0x00 };
-		const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, request, COUNT(request)));
+		const RongyuanQuery query{
+			.command = RONGYUAN_SETTINGS,
+			.arguments = { 0x00, 0x01, 0x00 },
+		};
+		const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, query));
 		if (reply.size() < sizeof(RongyuanSettingsPage))
 		{
 			return false;
@@ -419,8 +436,11 @@ NAMESPACE_SOUP
 	{
 		for (uint8_t page = 0; page != 8; ++page) // eight pages, sixteen records each
 		{
-			const uint8_t command[] = { 0x8A, 0x00, 0xFF, page, 0x00, 0x00, 0x00 };
-			const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, command, COUNT(command)));
+			const RongyuanQuery query{
+				.command = RONGYUAN_KEY_MAP,
+				.arguments = { 0x00, 0xFF, page, 0x00, 0x00, 0x00 },
+			};
+			const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, query));
 			if (reply.size() < 1 + 16 * 4)
 			{
 				return false;
@@ -1423,8 +1443,11 @@ if (combined[i]) \
 		{
 			rongyuan.state = 1;
 
-			const uint8_t start[] = { 0x1B, 0x01 };
-			cmd.sendFeatureReport(rongyuanReport(cmd, start, COUNT(start)));
+			const RongyuanQuery query{
+				.command = RONGYUAN_MAGNETISM,
+				.arguments = { 0x01 },
+			};
+			cmd.sendFeatureReport(rongyuanReport(cmd, query));
 		}
 		else
 		{
