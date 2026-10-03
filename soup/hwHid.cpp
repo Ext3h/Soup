@@ -9,8 +9,6 @@
 
 #include <cfgmgr32.h>
 #include <hidsdi.h>
-#include <winioctl.h> // hidclass.h needs CTL_CODE and FILE_DEVICE_KEYBOARD from here
-#include <hidclass.h>
 
 #pragma comment(lib, "cfgmgr32.lib")
 #pragma comment(lib, "hid.lib")
@@ -518,10 +516,8 @@ NAMESPACE_SOUP
 
 	void hwHid::increaseInputReportBufferCount() noexcept
 	{
-		// The HID class refuses counts above 512; it answers ERROR_INVALID_PARAMETER past that.
-		ULONG count = 512;
-		DWORD returned = 0;
-		DeviceIoControl(handle, IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS, &count, sizeof(count), &count, sizeof(count), &returned, nullptr);
+		// Windows XP and later accept at most 512 input buffers, the default being 32.
+		HidD_SetNumInputBuffers(handle, 512);
 	}
 #endif
 
