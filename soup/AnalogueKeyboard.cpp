@@ -4,9 +4,11 @@
 
 #include "DigitalKeyboard.hpp"
 #include "HidScancode.hpp"
+#include "log.hpp" // logWriteLine
 #include "macros.hpp" // COUNT
 #include "MemoryRefReader.hpp"
 #include "NamedMutex.hpp"
+#include "os.hpp" // sleep
 #if SOUP_WINDOWS
 #include "Process.hpp"
 #endif
@@ -200,6 +202,18 @@ NAMESPACE_SOUP
 				// If I wanted to be stupid, I could buy their FIRE68 Ultra & NANO68 Pro just to map in the layouts for the shitty polling interface.
 			}
 		}
+		// RongYuan, the firmware of the Yichip-based magnetic keyboards (GamaKay,
+		// Attack Shark, Akko, Epomaker and others). The analogue stream is a
+		// vendor collection of its own and so is the one commands go to.
+		// Matching the product id keeps this on the board it was measured on;
+		// reading the key map at runtime is what a sibling model would need.
+		else if (hid.vendor_id == 0x3151 && hid.product_id == 0x5030)
+		{
+			if (hid.usage_page == 0xFFFF && hid.usage == 0x0001)
+			{
+				return hid.getProductName();
+			}
+		}
 
 		return {};
 	}
@@ -285,6 +299,143 @@ NAMESPACE_SOUP
 	[[nodiscard]] static SOUP_PURE Key layout_get_item(const uint8_t* layout, uint8_t index) noexcept { return (Key)layout[2 + index]; }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_row(const uint8_t* layout, uint8_t index) noexcept { return index / layout_get_cols(layout); }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_col(const uint8_t* layout, uint8_t index) noexcept { return index % layout_get_cols(layout); }
+
+	// A RongYuan keyboard's matrix is 15 columns of 6 rows, and it numbers a
+	// position column * 6 + row, the way the layouts above are written out.
+	static constexpr uint8_t RONGYUAN_POSITIONS = 90;
+
+	// The collection a RongYuan keyboard takes its commands on. It is a vendor
+	// collection of its own, on an interface of its own, so the analogue
+	// collection we hold cannot carry them.
+	[[nodiscard]] static hwHid rongyuanCommandChannel(const hwHid& kbd)
+	{
+		for (auto& cmd : hwHid::getAll())
+		{
+			if (cmd.vendor_id == kbd.vendor_id
+				&& cmd.product_id == kbd.product_id
+				&& cmd.usage_page == 0xFFFF
+				&& cmd.usage == 0x0002
+				&& cmd.havePermission()
+				)
+			{
+				return std::move(cmd);
+			}
+		}
+		return {};
+	}
+
+	// One command as a feature report the board will take: report id 0, up to
+	// seven command bytes, a checksum at byte 8 of 255 minus the sum of the
+	// seven bytes before it, and zeroes up to the report length.
+	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, const uint8_t* command, size_t size)
+	{
+		SOUP_ASSERT(size <= 7);
+
+		Buffer<> report;
+		report.append("\0", 1);
+		report.append(command, size);
+		report.insert_back(9 - size, '\0'); // the rest, up to and including the checksum
+		uint8_t sum = 0;
+		for (uint8_t i = 1; i != 8; ++i)
+		{
+			sum += report.at(i);
+		}
+		report.at(8) = static_cast<uint8_t>(255 - sum);
+
+		if (report.size() < cmd.feature_report_byte_length)
+		{
+			report.insert_back(cmd.feature_report_byte_length - report.size(), '\0');
+		}
+		return report;
+	}
+
+	// Sends one command and reads the board's answer out of the report it went
+	// in. The board replaces the request with the answer a few milliseconds
+	// later - measured at about eight, so 50 attempts two milliseconds apart
+	// are a wide allowance - which makes the answer the first read that
+	// differs from what was sent. A command the board does not handle stays
+	// echoed, and that is the empty return.
+	[[nodiscard]] static Buffer<> rongyuanAsk(hwHid& cmd, Buffer<>&& request)
+	{
+		Buffer<> sent;
+		sent.append(request.data(), request.size());
+
+		if (!cmd.sendFeatureReport(std::move(request)))
+		{
+			return {};
+		}
+
+		for (uint8_t attempt = 0; attempt != 50; ++attempt)
+		{
+			Buffer<> reply;
+			cmd.receiveFeatureReport(reply);
+			if (reply.size() == sent.size()
+				&& memcmp(reply.data(), sent.data(), sent.size()) != 0
+				)
+			{
+				return reply;
+			}
+			os::sleep(2);
+		}
+		return {};
+	}
+
+	// The per-key travel read doubles as a magnetic-switch check: a board of
+	// the family without them answers 0xFFFF for every position, and one that
+	// does not answer at all is not one of ours either.
+	[[nodiscard]] static bool rongyuanIsMagnetic(hwHid& cmd)
+	{
+		const uint8_t request[] = { 0xE5, 0x00, 0x01, 0x00 }; // per-key settings, sub-command 0 = travel, one page, page 0
+		const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, request, COUNT(request)));
+		for (size_t i = 1; i + 1 < reply.size(); i += 2)
+		{
+			if ((reply.at(i) | (reply.at(i + 1) << 8)) != 0xFFFF)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Reads the board's key map: eight pages of sixteen four-byte records with
+	// the HID usage third in each, which is also what the travel reports index
+	// their positions by. False when a page does not answer.
+	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key* layout)
+	{
+		for (uint8_t page = 0; page != 8; ++page)
+		{
+			const uint8_t command[] = { 0x8A, 0x00, 0xFF, page, 0x00, 0x00, 0x00 }; // command, profile, the marker the board insists on, page, sub-profile
+			const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, command, COUNT(command)));
+			if (reply.size() < 1 + 16 * 4) // the report id, then the page
+			{
+				return false;
+			}
+
+			for (uint8_t i = 0; i != 16; ++i)
+			{
+				const auto position = static_cast<uint8_t>(page * 16 + i);
+				if (position >= RONGYUAN_POSITIONS)
+				{
+					return true;
+				}
+				const uint8_t usage = reply.at(1 + i * 4 + 2);
+
+				// Fn is the one key whose record carries no usage: the bytes
+				// around it are not a keycode, and no other position on the
+				// board both has a record and lacks a usage.
+				if (usage == 0)
+				{
+					const bool has_record = reply.at(1 + i * 4) != 0 || reply.at(1 + i * 4 + 1) != 0;
+					layout[position] = has_record ? KEY_FN : KEY_NONE;
+				}
+				else
+				{
+					layout[position] = hid_scancode_to_soup_key(usage);
+				}
+			}
+		}
+		return true;
+	}
 
 	static const Key layout_madlions_mad60he[] = {
 		KEY_ESCAPE,    KEY_1,     KEY_2,    KEY_3,    KEY_4,    KEY_5,    KEY_6,     KEY_7,    KEY_8,    KEY_9,     KEY_0,         KEY_MINUS,        KEY_EQUALS,        KEY_BACKSPACE,
@@ -596,6 +747,10 @@ NAMESPACE_SOUP
 		else if (hid.vendor_id == 0x373b)
 		{
 			return getActiveKeysMadlions();
+		}
+		else if (hid.vendor_id == 0x3151)
+		{
+			return getActiveKeysRongyuan();
 		}
 		else
 		{
@@ -1238,6 +1393,87 @@ if (combined[i]) \
 #if SOUP_WINDOWS
 		mtx.unlock();
 #endif
+
+		return keys;
+	}
+
+	// Learns what the board calls each of its matrix positions and wakes its
+	// travel stream. Runs once per connection, on the first poll: commands go
+	// to a second vendor collection, and a probe at discovery time would be
+	// repeated by a host that rediscovers devices every second.
+	void AnalogueKeyboard::rongyuanSetup()
+	{
+		// 2 is "no key map": the keyboard stays listed - a host that loses a
+		// device rediscovers it every second - and reports no keys.
+		rongyuan.state = 2;
+		memset(rongyuan.buffer, 0, sizeof(rongyuan.buffer)); // the constructor's zeroing only reaches the first bytes of the union
+
+		hwHid cmd = rongyuanCommandChannel(hid);
+		if (cmd.isValid()
+			&& rongyuanIsMagnetic(cmd) // the start command is the family's own, so only a magnetic board is sent it
+			&& rongyuanReadKeyMap(cmd, rongyuan.layout)
+			)
+		{
+			rongyuan.state = 1;
+
+			const uint8_t start[] = { 0x1B, 0x01 }; // report magnetism reports: on
+			cmd.sendFeatureReport(rongyuanReport(cmd, start, COUNT(start)));
+		}
+		else
+		{
+			logWriteLine("RongYuan: no key map was read; the keyboard will report no keys.");
+		}
+	}
+
+	// The board streams one report per key that moves, so the buffer is what
+	// holds a key down between reports - a held key only sends a heartbeat
+	// about three times a second - and every non-zero entry is emitted.
+	std::vector<ActiveKey> AnalogueKeyboard::getActiveKeysRongyuan()
+	{
+		std::vector<ActiveKey> keys{};
+
+		if (rongyuan.state == 0)
+		{
+			rongyuanSetup();
+		}
+		if (rongyuan.state != 1)
+		{
+			// Nothing is coming: a board whose key map was not read was never
+			// sent the start command, so waiting for a report would wait
+			// forever.
+			return keys;
+		}
+
+		const Buffer<>& report = hid.receiveReport();
+		SOUP_IF_UNLIKELY (report.empty())
+		{
+			disconnected = true;
+		}
+		else if (report.size() >= 5
+			&& report.at(0) == 5 // the analogue report id
+			&& report.at(1) == 0x1B // its constant sub-type, which is also command 27's number
+			)
+		{
+			const uint8_t position = report.at(4);
+			if (position < RONGYUAN_POSITIONS && rongyuan.layout[position] != KEY_NONE)
+			{
+				const uint16_t travel = static_cast<uint16_t>(report.at(2) | (report.at(3) << 8));
+				rongyuan.buffer[position] = travel < 5
+					? 0 // the same "no longer pressed" cut-off the Keychron branch uses
+					: static_cast<uint8_t>(std::min(travel * 255u / 810u, 255u)); // 810 is the travel the board reaches when slammed; Soup has no per-key calibration for any keyboard
+			}
+		}
+
+		for (uint8_t position = 0; position != RONGYUAN_POSITIONS; ++position)
+		{
+			if (rongyuan.buffer[position] != 0)
+			{
+				keys.emplace_back(ActiveKey{
+					rongyuan.layout[position],
+					static_cast<float>(rongyuan.buffer[position]) / 255.0f
+				});
+			}
+		}
 
 		return keys;
 	}

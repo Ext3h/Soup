@@ -217,6 +217,7 @@ NAMESPACE_SOUP
 		case HID_SEMICOLON: return KEY_SEMICOLON;
 		case HID_QUOTE: return KEY_QUOTE;
 		case HID_BACKSLASH: return KEY_BACKSLASH;
+		case HID_INTL_HASH: return KEY_BACKSLASH; // where ISO layouts put '#' and '~', the position ANSI gives the backslash
 		case HID_SHIFT_LEFT: return KEY_LSHIFT;
 		case HID_INTL_BACKSLASH: return KEY_INTL_BACKSLASH;
 		case HID_Z: return KEY_Z;

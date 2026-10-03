@@ -39,6 +39,12 @@ NAMESPACE_SOUP
 				const Key* layout;
 				uint8_t buffer[NUM_KEYS];
 			} madlions;
+			struct
+			{
+				uint8_t state; // 0: not set up, 1: the board's key map is in `layout`, 2: no key map
+				Key layout[90]; // the board's own key at each of its 15x6 matrix positions, column * 6 + row
+				uint8_t buffer[90]; // the travel each position last reported, scaled to 0..255, 0 being not pressed
+			} rongyuan;
 		};
 
 		AnalogueKeyboard() = default;
@@ -101,5 +107,7 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysKeychron();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysNuphy();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysMadlions();
+		[[nodiscard]] std::vector<ActiveKey> getActiveKeysRongyuan();
+		void rongyuanSetup();
 	};
 }
