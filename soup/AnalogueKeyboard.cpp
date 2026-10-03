@@ -1464,6 +1464,8 @@ if (combined[i]) \
 		}
 	}
 
+	// The analogue collection's only input report id; byte 1 tells its reports apart.
+	static constexpr uint8_t RONGYUAN_INPUT_REPORT = 5;
 	// The travel count a slam reaches on this board; nothing measured goes past it.
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
 
@@ -1494,7 +1496,7 @@ if (combined[i]) \
 				RongyuanTravelReport travel_report;
 				memcpy(&travel_report, report.data(), sizeof(travel_report));
 				const size_t position = travel_report.position;
-				if (travel_report.report_id == 5 && travel_report.marker == 0x1B
+				if (travel_report.report_id == RONGYUAN_INPUT_REPORT && travel_report.marker == RONGYUAN_MAGNETISM
 					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 				{
 					const Key sk = rongyuan.layout[position];
