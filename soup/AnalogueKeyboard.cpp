@@ -372,18 +372,18 @@ NAMESPACE_SOUP
 	};
 #pragma pack(pop)
 
-	// One query as a feature report the board will take.
-	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, RongyuanQuery query)
+	// The buffer that carries a query: the frame, padded to the collection's feature report length.
+	[[nodiscard]] static Buffer<> rongyuanQueryBuffer(const hwHid& cmd, RongyuanQuery query)
 	{
 		query.updateChecksum();
 
-		Buffer<> report;
-		report.append(reinterpret_cast<const char*>(&query), sizeof(query));
-		if (report.size() < cmd.feature_report_byte_length)
+		Buffer<> buffer;
+		buffer.append(reinterpret_cast<const char*>(&query), sizeof(query));
+		if (buffer.size() < cmd.feature_report_byte_length)
 		{
-			report.insert_back(cmd.feature_report_byte_length - report.size(), '\0');
+			buffer.insert_back(cmd.feature_report_byte_length - buffer.size(), '\0');
 		}
-		return report;
+		return buffer;
 	}
 
 	// Sends one command and returns the board's answer; empty when it never comes.
@@ -420,7 +420,7 @@ NAMESPACE_SOUP
 			.command = RONGYUAN_SETTINGS,
 			.arguments = { 0x00, 0x01, 0x00 },
 		};
-		const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, query));
+		const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
 		if (reply.size() < sizeof(RongyuanSettingsPage))
 		{
 			return false;
@@ -445,7 +445,7 @@ NAMESPACE_SOUP
 				.command = RONGYUAN_KEY_MAP,
 				.arguments = { 0x00, 0xFF, page, 0x00, 0x00, 0x00 },
 			};
-			const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, query));
+			const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
 			if (reply.size() < 1 + 16 * 4)
 			{
 				return false;
@@ -1452,7 +1452,7 @@ if (combined[i]) \
 				.command = RONGYUAN_MAGNETISM,
 				.arguments = { 0x01 },
 			};
-			cmd.sendFeatureReport(rongyuanReport(cmd, query));
+			cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query));
 		}
 		else
 		{
