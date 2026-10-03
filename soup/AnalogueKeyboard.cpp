@@ -1560,7 +1560,6 @@ if (combined[i]) \
 					const Key sk = rongyuan.layout[position];
 					if (sk != KEY_NONE)
 					{
-						// 0 while the key is up; the board reports nothing between 0 and 22.
 						rongyuan.buffer[sk] = travel_report.travel;
 					}
 				}
