@@ -1480,24 +1480,33 @@ if (combined[i]) \
 			return keys;
 		}
 
-		const Buffer<>& report = hid.receiveReport();
-		SOUP_IF_UNLIKELY (report.empty())
+		// Each report carries one key, so everything queued has to be read before the vector is current.
+		while (true)
 		{
-			disconnected = true;
-		}
-		else if (report.size() >= sizeof(RongyuanTravelReport))
-		{
-			RongyuanTravelReport travel_report;
-			memcpy(&travel_report, report.data(), sizeof(travel_report));
-			const size_t position = travel_report.position;
-			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
-				&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
+			const Buffer<>& report = hid.receiveReport();
+			SOUP_IF_UNLIKELY (report.empty())
 			{
-				const Key sk = rongyuan.layout[position];
-				if (sk != KEY_NONE)
+				disconnected = true;
+				break;
+			}
+			if (report.size() >= sizeof(RongyuanTravelReport))
+			{
+				RongyuanTravelReport travel_report;
+				memcpy(&travel_report, report.data(), sizeof(travel_report));
+				const size_t position = travel_report.position;
+				if (travel_report.report_id == 5 && travel_report.marker == 0x1B
+					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 				{
-					rongyuan.buffer[sk] = travel_report.travel < 5 ? 0 : travel_report.travel;
+					const Key sk = rongyuan.layout[position];
+					if (sk != KEY_NONE)
+					{
+						rongyuan.buffer[sk] = travel_report.travel < 5 ? 0 : travel_report.travel;
+					}
 				}
+			}
+			if (!hid.hasReport())
+			{
+				break;
 			}
 		}
 
