@@ -296,6 +296,7 @@ NAMESPACE_SOUP
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_row(const uint8_t* layout, uint8_t index) noexcept { return index / layout_get_cols(layout); }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_col(const uint8_t* layout, uint8_t index) noexcept { return index % layout_get_cols(layout); }
 
+	// Commands go to the keyboard's other vendor collection; the analogue one we were built with cannot carry them.
 	[[nodiscard]] static hwHid rongyuanCommandChannel(const hwHid& kbd)
 	{
 		for (auto& cmd : hwHid::getAll())
