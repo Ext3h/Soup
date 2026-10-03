@@ -1464,6 +1464,9 @@ if (combined[i]) \
 		}
 	}
 
+	// The travel count a slam reaches on this board; nothing measured goes past it.
+	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
+
 	std::vector<ActiveKey> AnalogueKeyboard::getActiveKeysRongyuan()
 	{
 		std::vector<ActiveKey> keys{};
@@ -1495,7 +1498,7 @@ if (combined[i]) \
 				{
 					rongyuan.buffer[sk] = travel_report.travel < 5
 						? 0
-						: static_cast<uint8_t>(std::min(travel_report.travel * 255u / 810u, 255u));
+						: static_cast<uint8_t>(std::min(travel_report.travel * 255u / RONGYUAN_FULL_TRAVEL, 255u));
 				}
 			}
 		}
