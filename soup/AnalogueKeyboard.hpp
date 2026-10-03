@@ -41,12 +41,11 @@ NAMESPACE_SOUP
 			} madlions;
 			struct
 			{
-				// The most matrix positions a RongYuan key map can name.
 				static constexpr size_t RONGYUAN_POSITIONS = 128;
 
-				uint8_t state; // 0: not set up, 1: the board's key map, 2: no key map
-				Key layout[RONGYUAN_POSITIONS]; // matrix position -> key
-				uint16_t buffer[NUM_KEYS]; // travel counts, by key
+				uint8_t state;
+				Key layout[RONGYUAN_POSITIONS];
+				uint16_t buffer[NUM_KEYS];
 			} rongyuan;
 		};
 
