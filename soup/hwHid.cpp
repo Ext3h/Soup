@@ -9,6 +9,8 @@
 
 #include <cfgmgr32.h>
 #include <hidsdi.h>
+#include <winioctl.h> // hidclass.h needs CTL_CODE and FILE_DEVICE_KEYBOARD from here
+#include <hidclass.h>
 
 #pragma comment(lib, "cfgmgr32.lib")
 #pragma comment(lib, "hid.lib")
@@ -512,6 +514,13 @@ NAMESPACE_SOUP
 		}
 
 		return ret;
+	}
+
+	void hwHid::setInputReportBufferCount(uint32_t count) noexcept
+	{
+		ULONG value = count;
+		DWORD returned = 0;
+		DeviceIoControl(handle, IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS, &value, sizeof(value), &value, sizeof(value), &returned, nullptr);
 	}
 #endif
 

@@ -1461,6 +1461,12 @@ if (combined[i]) \
 			return;
 		}
 
+#if SOUP_WINDOWS
+		// A press bursts to ~160 reports per 50 ms at eight keys, against the 32 the host
+		// buffers per handle, so a polling caller has the rest dropped before it wakes up.
+		kbd.hid.setInputReportBufferCount(512);
+#endif
+
 		hwHid cmd = rongyuanCommandChannel(kbd.hid);
 		if (cmd.isValid()
 			&& rongyuanIsMagnetic(cmd)
