@@ -373,14 +373,14 @@ NAMESPACE_SOUP
 	// One page of the key map read: a report id, then sixteen records.
 	struct RongyuanKeyMapPage
 	{
-		uint8_t report_id;
+		uint8_t report_id; // 0
 		RongyuanKeyRecord records[RONGYUAN_RECORDS_PER_PAGE];
 	};
 
 	// One page of the per-key settings read: a report id, then 32 values.
 	struct RongyuanSettingsPage
 	{
-		uint8_t report_id;
+		uint8_t report_id; // 0
 		uint16_t values[32];
 	};
 #pragma pack(pop)
@@ -410,12 +410,14 @@ NAMESPACE_SOUP
 			return {};
 		}
 
-		// The board holds the request in the report until it has acted on it, so the answer is the first read that differs from it.
+		// An answer to an earlier command can still be in the report, so a read counts only when byte 1 carries this
+		// command and the rest has changed from the request.
 		for (uint8_t attempt = 0; attempt != 50; ++attempt)
 		{
 			Buffer<> reply;
 			cmd.receiveFeatureReport(reply);
 			if (reply.size() == sent.size()
+				&& reply[1] == sent[1]
 				&& memcmp(reply.data(), sent.data(), sent.size()) != 0
 				)
 			{
@@ -440,6 +442,10 @@ NAMESPACE_SOUP
 		}
 		RongyuanSettingsPage page;
 		memcpy(&page, reply.data(), sizeof(page));
+		if (page.report_id != 0) // any other framing would shift every value
+		{
+			return false;
+		}
 		for (const uint16_t value : page.values)
 		{
 			if (value != 0xFFFF) // what a position without a switch answers
@@ -467,6 +473,10 @@ NAMESPACE_SOUP
 
 			RongyuanKeyMapPage key_map_page;
 			memcpy(&key_map_page, reply.data(), sizeof(key_map_page));
+			if (key_map_page.report_id != 0) // any other framing would shift every record
+			{
+				return false;
+			}
 
 			for (size_t i = 0; i != RONGYUAN_RECORDS_PER_PAGE; ++i)
 			{
