@@ -202,8 +202,10 @@ NAMESPACE_SOUP
 				// If I wanted to be stupid, I could buy their FIRE68 Ultra & NANO68 Pro just to map in the layouts for the shitty polling interface.
 			}
 		}
-		// RongYuan (the Yichip-based magnetic keyboards: GamaKay, Attack Shark, Akko, Epomaker)
-		else if (hid.vendor_id == 0x3151 && hid.product_id == 0x5030)
+		// RongYuan, the Yichip-based magnetic keyboards: GamaKay, Attack Shark, Akko and others.
+		// Matched on the vendor id alone - the family spans many product pairs, and which of them a board is
+		// is settled at setup, by the settings gate and the key map read.
+		else if (hid.vendor_id == 0x3151)
 		{
 			if (hid.usage_page == 0xFFFF && hid.usage == 0x0001)
 			{
