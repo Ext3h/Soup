@@ -441,11 +441,11 @@ NAMESPACE_SOUP
 	// Fills `layout` from the board's own key map; false when a page does not answer.
 	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key (&layout)[RONGYUAN_POSITIONS])
 	{
-		for (uint8_t page = 0; page != RONGYUAN_PAGES; ++page)
+		for (size_t page = 0; page != RONGYUAN_PAGES; ++page)
 		{
 			const RongyuanQuery query{
 				.command = RONGYUAN_KEY_MAP,
-				.arguments = { 0x00, 0xFF, page, 0x00, 0x00, 0x00 },
+				.arguments = { 0x00, 0xFF, static_cast<uint8_t>(page), 0x00, 0x00, 0x00 },
 			};
 			const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
 			if (reply.size() < 1 + RONGYUAN_RECORDS_PER_PAGE * sizeof(RongyuanKeyRecord))
@@ -453,9 +453,9 @@ NAMESPACE_SOUP
 				return false;
 			}
 
-			for (uint8_t i = 0; i != RONGYUAN_RECORDS_PER_PAGE; ++i)
+			for (size_t i = 0; i != RONGYUAN_RECORDS_PER_PAGE; ++i)
 			{
-				const auto position = static_cast<uint8_t>(page * RONGYUAN_RECORDS_PER_PAGE + i);
+				const size_t position = page * RONGYUAN_RECORDS_PER_PAGE + i;
 				RongyuanKeyRecord record;
 				memcpy(&record, reply.data() + 1 + i * sizeof(RongyuanKeyRecord), sizeof(record));
 
@@ -1481,7 +1481,7 @@ if (combined[i]) \
 		{
 			RongyuanTravelReport travel_report;
 			memcpy(&travel_report, report.data(), sizeof(travel_report));
-			const uint8_t position = travel_report.position;
+			const size_t position = travel_report.position;
 			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
 				&& position < RONGYUAN_POSITIONS && rongyuan.layout[position] != KEY_NONE)
 			{
@@ -1491,7 +1491,7 @@ if (combined[i]) \
 			}
 		}
 
-		for (uint8_t position = 0; position != RONGYUAN_POSITIONS; ++position)
+		for (size_t position = 0; position != RONGYUAN_POSITIONS; ++position)
 		{
 			if (rongyuan.buffer[position] != 0)
 			{

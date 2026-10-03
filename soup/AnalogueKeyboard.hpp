@@ -10,9 +10,9 @@
 NAMESPACE_SOUP
 {
 	// The key map read: eight pages of sixteen records, so the most matrix positions a board can name.
-	static constexpr uint8_t RONGYUAN_PAGES = 8;
-	static constexpr uint8_t RONGYUAN_RECORDS_PER_PAGE = 16;
-	static constexpr uint8_t RONGYUAN_POSITIONS = RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE;
+	static constexpr size_t RONGYUAN_PAGES = 8;
+	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
+	static constexpr size_t RONGYUAN_POSITIONS = RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE;
 
 	struct AnalogueKeyboard
 	{
