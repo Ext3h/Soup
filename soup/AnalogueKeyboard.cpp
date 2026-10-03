@@ -1473,7 +1473,7 @@ if (combined[i]) \
 		}
 	}
 
-	// The analogue collection's only input report id; byte 1 tells its reports apart.
+	// The analogue collection's only input report id, per its descriptor; byte 1 tells its reports apart.
 	static constexpr uint8_t RONGYUAN_INPUT_REPORT = 5;
 	// The travel count a slam reaches on this board; nothing measured goes past it.
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
