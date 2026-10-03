@@ -404,19 +404,24 @@ NAMESPACE_SOUP
 		Buffer<> sent;
 		sent.append(request.data(), request.size());
 
+		// The report can still hold the previous command's answer, which differs from this request too; reading it
+		// out first is the only discriminator the protocol offers, since the replies name no command.
+		{
+			Buffer<> stale;
+			cmd.receiveFeatureReport(stale);
+		}
+
 		if (!cmd.sendFeatureReport(std::move(request)))
 		{
 			return {};
 		}
 
-		// An answer to an earlier command can still be in the report, so a read counts only when byte 1 carries this
-		// command and the rest has changed from the request.
+		// The board holds the request in the report until it has acted, so the answer is the first read that differs from it.
 		for (uint8_t attempt = 0; attempt != 50; ++attempt)
 		{
 			Buffer<> reply;
 			cmd.receiveFeatureReport(reply);
 			if (reply.size() == sent.size()
-				&& reply[1] == sent[1]
 				&& memcmp(reply.data(), sent.data(), sent.size()) != 0
 				)
 			{
