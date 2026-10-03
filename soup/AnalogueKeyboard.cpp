@@ -1511,7 +1511,9 @@ if (combined[i]) \
 				RongyuanTravelReport travel_report;
 				memcpy(&travel_report, report.data(), sizeof(travel_report));
 				const size_t position = travel_report.position;
-				if (travel_report.marker == RONGYUAN_MAGNETIC_AXIS_TRAVEL
+				// The id leads the frame on Windows and Linux; anything else is skipped, not misread.
+				if (travel_report.report_id == RONGYUAN_INPUT_REPORT
+					&& travel_report.marker == RONGYUAN_MAGNETIC_AXIS_TRAVEL
 					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 				{
 					const Key sk = rongyuan.layout[position];
