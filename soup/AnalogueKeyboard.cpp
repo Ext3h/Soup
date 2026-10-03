@@ -336,7 +336,8 @@ NAMESPACE_SOUP
 
 		void updateChecksum()
 		{
-			const auto* bytes = reinterpret_cast<const uint8_t*>(this);
+			uint8_t bytes[8];
+			memcpy(bytes, this, sizeof(bytes));
 			uint8_t sum = 0;
 			for (uint8_t i = 1; i != 8; ++i)
 			{
@@ -378,7 +379,7 @@ NAMESPACE_SOUP
 		query.updateChecksum();
 
 		Buffer<> buffer;
-		buffer.append(reinterpret_cast<const char*>(&query), sizeof(query));
+		buffer.append(&query, sizeof(query));
 		if (buffer.size() < cmd.feature_report_byte_length)
 		{
 			buffer.insert_back(cmd.feature_report_byte_length - buffer.size(), '\0');
@@ -425,7 +426,8 @@ NAMESPACE_SOUP
 		{
 			return false;
 		}
-		const auto& page = *reinterpret_cast<const RongyuanSettingsPage*>(reply.data());
+		RongyuanSettingsPage page;
+		memcpy(&page, reply.data(), sizeof(page));
 		for (const uint16_t value : page.values)
 		{
 			if (value != 0xFFFF) // what a position without a switch answers
@@ -458,7 +460,8 @@ NAMESPACE_SOUP
 				{
 					return true;
 				}
-				const auto& record = *reinterpret_cast<const RongyuanKeyRecord*>(reply.data() + 1 + i * sizeof(RongyuanKeyRecord));
+				RongyuanKeyRecord record;
+				memcpy(&record, reply.data() + 1 + i * sizeof(RongyuanKeyRecord), sizeof(record));
 
 				// A record that is not empty but carries no usage is Fn.
 				if (record.usage == 0)
@@ -1480,7 +1483,8 @@ if (combined[i]) \
 		}
 		else if (report.size() >= sizeof(RongyuanTravelReport))
 		{
-			const auto& travel_report = *reinterpret_cast<const RongyuanTravelReport*>(report.data());
+			RongyuanTravelReport travel_report;
+			memcpy(&travel_report, report.data(), sizeof(travel_report));
 			const uint8_t position = travel_report.position;
 			if (travel_report.report_id == 5 && travel_report.marker == 0x1B
 				&& position < NUM_KEYS && rongyuan.layout[position] != KEY_NONE)
