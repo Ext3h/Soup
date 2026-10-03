@@ -339,7 +339,9 @@ NAMESPACE_SOUP
 		return report;
 	}
 
-	// The board answers in the report the request went in, so the answer is the first read that differs from it.
+	// Sends one command and reads the board's answer out of the report it went
+	// in: the board holds the request there until it has acted on it, so an answer
+	// is the first read that differs from it, and one it never acts on stays echoed.
 	[[nodiscard]] static Buffer<> rongyuanAsk(hwHid& cmd, Buffer<>&& request)
 	{
 		Buffer<> sent;
