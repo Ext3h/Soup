@@ -404,19 +404,13 @@ NAMESPACE_SOUP
 		Buffer<> sent;
 		sent.append(request.data(), request.size());
 
-		// The report can still hold the previous command's answer, which differs from this request too; reading it
-		// out first is the only discriminator the protocol offers, since the replies name no command.
-		{
-			Buffer<> stale;
-			cmd.receiveFeatureReport(stale);
-		}
-
 		if (!cmd.sendFeatureReport(std::move(request)))
 		{
 			return {};
 		}
 
-		// The board holds the request in the report until it has acted, so the answer is the first read that differs from it.
+		// The write replaces what the report held and the board keeps the request there until it answers, so the
+		// answer is the first read past the request — a repeat of the same command answers byte-identically.
 		for (uint8_t attempt = 0; attempt != 50; ++attempt)
 		{
 			Buffer<> reply;
