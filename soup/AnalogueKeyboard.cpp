@@ -296,9 +296,6 @@ NAMESPACE_SOUP
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_row(const uint8_t* layout, uint8_t index) noexcept { return index / layout_get_cols(layout); }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_col(const uint8_t* layout, uint8_t index) noexcept { return index % layout_get_cols(layout); }
 
-	// 15 columns of 6 rows, a position being column * 6 + row.
-	static constexpr uint8_t RONGYUAN_POSITIONS = 90;
-
 	[[nodiscard]] static hwHid rongyuanCommandChannel(const hwHid& kbd)
 	{
 		for (auto& cmd : hwHid::getAll())
@@ -397,7 +394,7 @@ NAMESPACE_SOUP
 			for (uint8_t i = 0; i != 16; ++i)
 			{
 				const auto position = static_cast<uint8_t>(page * 16 + i);
-				if (position >= RONGYUAN_POSITIONS)
+				if (position >= NUM_KEYS)
 				{
 					return true;
 				}
@@ -1424,7 +1421,7 @@ if (combined[i]) \
 			)
 		{
 			const uint8_t position = report.at(4);
-			if (position < RONGYUAN_POSITIONS && rongyuan.layout[position] != KEY_NONE)
+			if (position < NUM_KEYS && rongyuan.layout[position] != KEY_NONE)
 			{
 				const uint16_t travel = static_cast<uint16_t>(report.at(2) | (report.at(3) << 8));
 				rongyuan.buffer[position] = travel < 5
@@ -1433,7 +1430,7 @@ if (combined[i]) \
 			}
 		}
 
-		for (uint8_t position = 0; position != RONGYUAN_POSITIONS; ++position)
+		for (uint8_t position = 0; position != NUM_KEYS; ++position)
 		{
 			if (rongyuan.buffer[position] != 0)
 			{
