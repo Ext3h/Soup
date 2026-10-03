@@ -1525,6 +1525,10 @@ if (combined[i]) \
 		kbd.rongyuan.state = RONGYUAN_READY;
 	}
 
+	// Below this a key counts as released. The board reports 0 or nothing in between: the
+	// smallest travel ever seen for a touched key is 22, so the threshold sits in that gap.
+	static constexpr uint16_t RONGYUAN_MIN_TRAVEL = 5;
+
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
 
 	std::vector<ActiveKey> AnalogueKeyboard::getActiveKeysRongyuan()
@@ -1560,7 +1564,7 @@ if (combined[i]) \
 					const Key sk = rongyuan.layout[position];
 					if (sk != KEY_NONE)
 					{
-						rongyuan.buffer[sk] = travel_report.travel < 5 ? 0 : travel_report.travel;
+						rongyuan.buffer[sk] = travel_report.travel < RONGYUAN_MIN_TRAVEL ? 0 : travel_report.travel;
 					}
 				}
 			}
