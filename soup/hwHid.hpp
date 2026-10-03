@@ -134,9 +134,7 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::string getProductName() const;
 		[[nodiscard]] std::string getSerialNumber() const;
 
-		// The HID class buffers input reports per handle: 32 by default, and it refuses
-		// to go above 512. A caller reading a bursty stream widens it here; the setting
-		// lives on the handle, so it needs no restoring and reaches no other process.
+		// The HID class refuses any count above 512.
 		void setInputReportBufferCount(uint32_t count) noexcept;
 #else
 		[[nodiscard]] const std::string& getManufacturerName() const
