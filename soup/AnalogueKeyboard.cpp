@@ -325,6 +325,8 @@ NAMESPACE_SOUP
 		RONGYUAN_SETTINGS = 0xE5,
 	};
 
+	// The analogue collection's input report id; setup checks the descriptor declares it, and byte 1 tells reports apart.
+	static constexpr uint8_t RONGYUAN_INPUT_REPORT = 5;
 	// The key map read asks for eight pages of sixteen four-byte records.
 	static constexpr size_t RONGYUAN_PAGES = 8;
 	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
@@ -1453,6 +1455,12 @@ if (combined[i]) \
 		rongyuan.state = 2;
 		memset(rongyuan.buffer, 0, sizeof(rongyuan.buffer));
 
+		if (!hid.hasReportId(RONGYUAN_INPUT_REPORT))
+		{
+			logWriteLine("RongYuan: the analogue collection declares no report 5; the keyboard will report no keys.");
+			return;
+		}
+
 		hwHid cmd = rongyuanCommandChannel(hid);
 		if (cmd.isValid()
 			&& rongyuanIsMagnetic(cmd)
@@ -1473,8 +1481,6 @@ if (combined[i]) \
 		}
 	}
 
-	// The analogue collection's only input report id, per its descriptor; byte 1 tells its reports apart.
-	static constexpr uint8_t RONGYUAN_INPUT_REPORT = 5;
 	// The travel count a slam reaches on this board; nothing measured goes past it.
 	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
 
@@ -1505,7 +1511,7 @@ if (combined[i]) \
 				RongyuanTravelReport travel_report;
 				memcpy(&travel_report, report.data(), sizeof(travel_report));
 				const size_t position = travel_report.position;
-				if (travel_report.report_id == RONGYUAN_INPUT_REPORT && travel_report.marker == RONGYUAN_MAGNETISM
+				if (travel_report.marker == RONGYUAN_MAGNETISM
 					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
 				{
 					const Key sk = rongyuan.layout[position];
