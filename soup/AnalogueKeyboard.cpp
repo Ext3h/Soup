@@ -203,8 +203,9 @@ NAMESPACE_SOUP
 			}
 		}
 		// RongYuan, the Yichip-based magnetic keyboards: GamaKay, Attack Shark, Akko and others.
-		// Matched on the vendor id alone - the family spans many product pairs, and which of them a board is
-		// is settled at setup, by the settings gate and the key map read.
+		// 0x3151 is Royuan's own vendor id, the one their white-label brands ship under. The family also
+		// appears under other vendor ids, and which board a device is gets settled at setup, by the
+		// settings gate and the key map read.
 		else if (hid.vendor_id == 0x3151)
 		{
 			if (hid.usage_page == 0xFFFF && hid.usage == 0x0001)
