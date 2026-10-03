@@ -325,6 +325,11 @@ NAMESPACE_SOUP
 		RONGYUAN_SETTINGS = 0xE5,
 	};
 
+	// The key map read asks for eight pages of sixteen four-byte records.
+	static constexpr size_t RONGYUAN_PAGES = 8;
+	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
+	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE * sizeof(Key) == sizeof(AnalogueKeyboard::rongyuan.layout));
+
 #pragma pack(push, 1)
 	// One query as the board takes it: the report id, the command and its arguments, then the checksum.
 	struct RongyuanQuery
@@ -363,6 +368,13 @@ NAMESPACE_SOUP
 		uint8_t modifier;
 		uint8_t usage;
 		uint8_t combo;
+	};
+
+	// One page of the key map read: a report id, then sixteen records.
+	struct RongyuanKeyMapPage
+	{
+		uint8_t report_id;
+		RongyuanKeyRecord records[RONGYUAN_RECORDS_PER_PAGE];
 	};
 
 	// One page of the per-key settings read: a report id, then 32 values.
@@ -438,11 +450,6 @@ NAMESPACE_SOUP
 		return false;
 	}
 
-	// The key map read asks for eight pages of sixteen four-byte records.
-	static constexpr size_t RONGYUAN_PAGES = 8;
-	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
-	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE * sizeof(Key) == sizeof(AnalogueKeyboard::rongyuan.layout));
-
 	// Fills `layout` from the board's own key map; false when a page does not answer.
 	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, decltype(AnalogueKeyboard::rongyuan.layout)& layout)
 	{
@@ -453,16 +460,18 @@ NAMESPACE_SOUP
 				.arguments = { 0x00, 0xFF, static_cast<uint8_t>(page), 0x00, 0x00, 0x00 },
 			};
 			const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
-			if (reply.size() < 1 + RONGYUAN_RECORDS_PER_PAGE * sizeof(RongyuanKeyRecord))
+			if (reply.size() < sizeof(RongyuanKeyMapPage))
 			{
 				return false;
 			}
 
+			RongyuanKeyMapPage key_map_page;
+			memcpy(&key_map_page, reply.data(), sizeof(key_map_page));
+
 			for (size_t i = 0; i != RONGYUAN_RECORDS_PER_PAGE; ++i)
 			{
 				const size_t position = page * RONGYUAN_RECORDS_PER_PAGE + i;
-				RongyuanKeyRecord record;
-				memcpy(&record, reply.data() + 1 + i * sizeof(RongyuanKeyRecord), sizeof(record));
+				const RongyuanKeyRecord& record = key_map_page.records[i];
 
 				// A record that is not empty but carries no usage is Fn.
 				if (record.usage == 0)
