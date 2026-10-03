@@ -343,15 +343,13 @@ NAMESPACE_SOUP
 	};
 #pragma pack(pop)
 
-	// Report id 0, up to seven command bytes, checksum at byte 8 = 255 minus their sum, zero-padded to the report
-	// length. Every implementation of this family's protocol found so far - the vendor's own, and three others
-	// reverse-engineered independently - uses the same position and the same arithmetic.
+	// One command as a feature report the board will take.
 	[[nodiscard]] static Buffer<> rongyuanReport(const hwHid& cmd, const uint8_t* command, size_t size)
 	{
 		SOUP_ASSERT(size <= 7);
 
 		Buffer<> report;
-		report.append("\0", 1);
+		report.append("\0", 1); // the report id
 		report.append(command, size);
 		report.insert_back(9 - size, '\0');
 		uint8_t sum = 0;
@@ -359,7 +357,7 @@ NAMESPACE_SOUP
 		{
 			sum += report.at(i);
 		}
-		report.at(8) = static_cast<uint8_t>(255 - sum);
+		report.at(8) = static_cast<uint8_t>(255 - sum); // the family's checksum; every implementation found puts it here
 
 		if (report.size() < cmd.feature_report_byte_length)
 		{
@@ -368,9 +366,7 @@ NAMESPACE_SOUP
 		return report;
 	}
 
-	// Sends one command and reads the board's answer out of the report it went
-	// in: the board holds the request there until it has acted on it, so an answer
-	// is the first read that differs from it, and one it never acts on stays echoed.
+	// Sends one command and returns the board's answer; empty when it never comes.
 	[[nodiscard]] static Buffer<> rongyuanAsk(hwHid& cmd, Buffer<>&& request)
 	{
 		Buffer<> sent;
@@ -381,6 +377,7 @@ NAMESPACE_SOUP
 			return {};
 		}
 
+		// The board holds the request in the report until it has acted on it, so the answer is the first read that differs from it.
 		for (uint8_t attempt = 0; attempt != 50; ++attempt)
 		{
 			Buffer<> reply;
@@ -396,7 +393,7 @@ NAMESPACE_SOUP
 		return {};
 	}
 
-	// The settings read doubles as the magnetic-switch check: 0xFFFF is what a position without a switch answers.
+	// True when the board answers the per-key settings read with something other than "no switch here".
 	[[nodiscard]] static bool rongyuanIsMagnetic(hwHid& cmd)
 	{
 		const uint8_t request[] = { 0xE5, 0x00, 0x01, 0x00 };
@@ -408,7 +405,7 @@ NAMESPACE_SOUP
 		const auto& page = *reinterpret_cast<const RongyuanSettingsPage*>(reply.data());
 		for (const uint16_t value : page.values)
 		{
-			if (value != 0xFFFF)
+			if (value != 0xFFFF) // what a position without a switch answers
 			{
 				return true;
 			}
@@ -416,10 +413,10 @@ NAMESPACE_SOUP
 		return false;
 	}
 
-	// Eight pages of sixteen four-byte records, the HID usage third; the position is the index the travel reports use.
+	// Fills `layout` from the board's own key map; false when a page does not answer.
 	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, Key* layout)
 	{
-		for (uint8_t page = 0; page != 8; ++page)
+		for (uint8_t page = 0; page != 8; ++page) // eight pages, sixteen records each
 		{
 			const uint8_t command[] = { 0x8A, 0x00, 0xFF, page, 0x00, 0x00, 0x00 };
 			const Buffer<> reply = rongyuanAsk(cmd, rongyuanReport(cmd, command, COUNT(command)));
