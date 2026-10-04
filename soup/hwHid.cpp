@@ -513,6 +513,12 @@ NAMESPACE_SOUP
 
 		return ret;
 	}
+
+	void hwHid::increaseInputReportBufferCount() noexcept
+	{
+		// Windows XP and later accept at most 512 input buffers, the default being 32.
+		HidD_SetNumInputBuffers(handle, 512);
+	}
 #endif
 
 	bool hwHid::isSamePhysicalDeviceAs(const hwHid& b) const

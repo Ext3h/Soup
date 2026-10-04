@@ -133,6 +133,8 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::string getManufacturerName() const;
 		[[nodiscard]] std::string getProductName() const;
 		[[nodiscard]] std::string getSerialNumber() const;
+
+		void increaseInputReportBufferCount() noexcept;
 #else
 		[[nodiscard]] const std::string& getManufacturerName() const
 		{

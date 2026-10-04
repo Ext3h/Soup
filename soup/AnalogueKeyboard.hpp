@@ -39,6 +39,14 @@ NAMESPACE_SOUP
 				const Key* layout;
 				uint8_t buffer[NUM_KEYS];
 			} madlions;
+			struct
+			{
+				static constexpr size_t RONGYUAN_POSITIONS = 128;
+
+				uint8_t state;
+				Key layout[RONGYUAN_POSITIONS];
+				uint16_t buffer[NUM_KEYS];
+			} rongyuan;
 		};
 
 		AnalogueKeyboard() = default;
@@ -101,5 +109,6 @@ NAMESPACE_SOUP
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysKeychron();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysNuphy();
 		[[nodiscard]] std::vector<ActiveKey> getActiveKeysMadlions();
+		[[nodiscard]] std::vector<ActiveKey> getActiveKeysRongyuan();
 	};
 }

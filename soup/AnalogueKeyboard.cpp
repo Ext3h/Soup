@@ -4,9 +4,11 @@
 
 #include "DigitalKeyboard.hpp"
 #include "HidScancode.hpp"
+#include "log.hpp"
 #include "macros.hpp" // COUNT
 #include "MemoryRefReader.hpp"
 #include "NamedMutex.hpp"
+#include "os.hpp"
 #if SOUP_WINDOWS
 #include "Process.hpp"
 #endif
@@ -200,6 +202,16 @@ NAMESPACE_SOUP
 				// If I wanted to be stupid, I could buy their FIRE68 Ultra & NANO68 Pro just to map in the layouts for the shitty polling interface.
 			}
 		}
+		// RongYuan, the Yichip-based magnetic keyboards: GamaKay, Attack Shark, Akko and others.
+		// 0x3151 is the vendor's own id, the one their white-label brands ship under; the product string
+		// names the board.
+		else if (hid.vendor_id == 0x3151)
+		{
+			if (hid.usage_page == 0xFFFF && hid.usage == 0x0001)
+			{
+				return hid.getProductName();
+			}
+		}
 
 		return {};
 	}
@@ -285,6 +297,207 @@ NAMESPACE_SOUP
 	[[nodiscard]] static SOUP_PURE Key layout_get_item(const uint8_t* layout, uint8_t index) noexcept { return (Key)layout[2 + index]; }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_row(const uint8_t* layout, uint8_t index) noexcept { return index / layout_get_cols(layout); }
 	[[nodiscard]] static SOUP_PURE uint8_t layout_index_to_col(const uint8_t* layout, uint8_t index) noexcept { return index % layout_get_cols(layout); }
+
+	// Commands go to the keyboard's other vendor collection; the analogue one we were built with cannot carry them.
+	[[nodiscard]] static hwHid rongyuanCommandChannel(const hwHid& kbd)
+	{
+		for (auto& cmd : hwHid::getAll())
+		{
+			if (cmd.isSamePhysicalDeviceAs(kbd)
+				&& cmd.usage_page == 0xFFFF
+				&& cmd.usage == 0x0002
+				)
+			{
+				return std::move(cmd);
+			}
+		}
+		return {};
+	}
+
+	// The board's command numbers, as they go in a query's second byte.
+	enum RongyuanCommand : uint8_t
+	{
+		RONGYUAN_MAGNETIC_AXIS_TRAVEL = 0x1B,
+		RONGYUAN_KEY_MAP = 0x8A,
+		RONGYUAN_FIRMWARE_ID = 0x8F,
+		RONGYUAN_SETTINGS = 0xE5,
+	};
+
+	// The analogue collection's input report id; setup checks the descriptor declares it, and byte 1 tells reports apart.
+	static constexpr uint8_t RONGYUAN_INPUT_REPORT_ID = 5;
+	// The firmware generation the travel counts' scale belongs to: the vendor app's divisor rule
+	// treats 1280 and up as 0.005 mm per count, and older firmware on coarser scales.
+	static constexpr uint16_t RONGYUAN_MIN_FIRMWARE = 1280;
+	// The key map read asks for eight pages of sixteen four-byte records.
+	static constexpr size_t RONGYUAN_PAGES = 8;
+	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
+	static_assert(RONGYUAN_PAGES * RONGYUAN_RECORDS_PER_PAGE * sizeof(Key) == sizeof(AnalogueKeyboard::rongyuan.layout));
+
+#pragma pack(push, 1)
+	// One query as the board takes it: the report id, the command and its arguments, then the checksum.
+	struct RongyuanQuery
+	{
+		uint8_t report_id;    // 0
+		RongyuanCommand command;
+		uint8_t arguments[6]; // command-specific, zero when unused
+		uint8_t checksum;     // the family's: 0xFF - the sum of the seven bytes before it
+
+		void updateChecksum()
+		{
+			uint8_t bytes[8];
+			memcpy(bytes, this, sizeof(bytes));
+			uint8_t sum = 0;
+			for (size_t i = 1; i != sizeof(bytes); ++i)
+			{
+				sum += bytes[i];
+			}
+			checksum = static_cast<uint8_t>(255 - sum);
+		}
+	};
+
+	// One key's travel, as the board streams it.
+	struct RongyuanTravelReport
+	{
+		uint8_t report_id;   // 5
+		uint8_t marker;      // 0x1B, the magnetic-axis travel command's own number
+		uint16_t travel;     // little-endian
+		uint8_t position;    // matrix position, col * 6 + row
+	};
+
+	// One key map position: a type tag, a modifier, a HID usage, a combo.
+	struct RongyuanKeyRecord
+	{
+		uint8_t type;
+		uint8_t modifier;
+		uint8_t usage;
+		uint8_t combo;
+	};
+
+	// One page of the key map read: a report id, then sixteen records.
+	struct RongyuanKeyMapPage
+	{
+		uint8_t report_id; // 0
+		RongyuanKeyRecord records[RONGYUAN_RECORDS_PER_PAGE];
+	};
+
+	// One page of the per-key settings read: a report id, then 32 values.
+	struct RongyuanSettingsPage
+	{
+		uint8_t report_id; // 0
+		uint16_t values[32];
+	};
+#pragma pack(pop)
+
+	// The buffer that carries a query: the frame, padded to the collection's feature report length.
+	[[nodiscard]] static Buffer<> rongyuanQueryBuffer(const hwHid& cmd, RongyuanQuery query)
+	{
+		query.updateChecksum();
+
+		Buffer<> buffer;
+		buffer.append(&query, sizeof(query));
+		if (buffer.size() < cmd.feature_report_byte_length)
+		{
+			buffer.insert_back(cmd.feature_report_byte_length - buffer.size(), '\0');
+		}
+		return buffer;
+	}
+
+	// Sends one command and returns the board's answer; empty when it never comes.
+	[[nodiscard]] static Buffer<> rongyuanAsk(hwHid& cmd, Buffer<>&& request)
+	{
+		Buffer<> sent;
+		sent.append(request.data(), request.size());
+
+		if (!cmd.sendFeatureReport(std::move(request)))
+		{
+			return {};
+		}
+
+		// The board keeps the request in the report until it answers, so the answer is the first read past it.
+		for (uint8_t attempt = 0; attempt != 50; ++attempt)
+		{
+			Buffer<> reply;
+			cmd.receiveFeatureReport(reply);
+			if (reply.size() == sent.size()
+				&& memcmp(reply.data(), sent.data(), sent.size()) != 0
+				)
+			{
+				return reply;
+			}
+			os::sleep(2);
+		}
+		return {};
+	}
+
+	// True when the board answers the per-key settings read with something other than "no switch here".
+	[[nodiscard]] static bool rongyuanIsMagnetic(hwHid& cmd)
+	{
+		const RongyuanQuery query{
+			.command = RONGYUAN_SETTINGS,
+			.arguments = { 0x00, 0x01, 0x00 },
+		};
+		const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
+		if (reply.size() < sizeof(RongyuanSettingsPage))
+		{
+			return false;
+		}
+		RongyuanSettingsPage page;
+		memcpy(&page, reply.data(), sizeof(page));
+		if (page.report_id != 0) // any other framing would shift every value
+		{
+			return false;
+		}
+		for (const uint16_t value : page.values)
+		{
+			if (value != 0xFFFF) // what a position without a switch answers
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Fills `layout` from the board's own key map; false when a page does not answer.
+	[[nodiscard]] static bool rongyuanReadKeyMap(hwHid& cmd, decltype(AnalogueKeyboard::rongyuan.layout)& layout)
+	{
+		for (size_t page = 0; page != RONGYUAN_PAGES; ++page)
+		{
+			const RongyuanQuery query{
+				.command = RONGYUAN_KEY_MAP,
+				.arguments = { 0x00, 0xFF, static_cast<uint8_t>(page), 0x00, 0x00, 0x00 },
+			};
+			const Buffer<> reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, query));
+			if (reply.size() < sizeof(RongyuanKeyMapPage))
+			{
+				return false;
+			}
+
+			RongyuanKeyMapPage key_map_page;
+			memcpy(&key_map_page, reply.data(), sizeof(key_map_page));
+			if (key_map_page.report_id != 0) // any other framing would shift every record
+			{
+				return false;
+			}
+
+			for (size_t i = 0; i != RONGYUAN_RECORDS_PER_PAGE; ++i)
+			{
+				const size_t position = page * RONGYUAN_RECORDS_PER_PAGE + i;
+				const RongyuanKeyRecord& record = key_map_page.records[i];
+
+				// A record that is not empty but carries no usage is Fn.
+				if (record.usage == 0)
+				{
+					const bool has_record = record.type != 0 || record.modifier != 0;
+					layout[position] = has_record ? KEY_FN : KEY_NONE;
+				}
+				else
+				{
+					layout[position] = hid_scancode_to_soup_key(record.usage);
+				}
+			}
+		}
+		return true;
+	}
 
 	static const Key layout_madlions_mad60he[] = {
 		KEY_ESCAPE,    KEY_1,     KEY_2,    KEY_3,    KEY_4,    KEY_5,    KEY_6,     KEY_7,    KEY_8,    KEY_9,     KEY_0,         KEY_MINUS,        KEY_EQUALS,        KEY_BACKSPACE,
@@ -596,6 +809,10 @@ NAMESPACE_SOUP
 		else if (hid.vendor_id == 0x373b)
 		{
 			return getActiveKeysMadlions();
+		}
+		else if (hid.vendor_id == 0x3151)
+		{
+			return getActiveKeysRongyuan();
 		}
 		else
 		{
@@ -1238,6 +1455,157 @@ if (combined[i]) \
 #if SOUP_WINDOWS
 		mtx.unlock();
 #endif
+
+		return keys;
+	}
+
+	// The setup's progress, held in AnalogueKeyboard::rongyuan.state; the constructor zeroes that
+	// storage, so not-tried stays first. A failure reason retries on the next call and is logged
+	// once; setup finds the command collection by opening every HID interface in the system.
+	enum RongyuanSetupState : uint8_t
+	{
+		RONGYUAN_NOT_TRIED,
+		RONGYUAN_READY,
+		RONGYUAN_NO_ANALOGUE_SWITCH, // terminal; the settings read found no analogue switch
+		RONGYUAN_NO_REPORT_5,
+		RONGYUAN_NO_COMMAND_CHANNEL,
+		RONGYUAN_NO_FIRMWARE_ID,
+		RONGYUAN_OLD_FIRMWARE, // terminal; the firmware predates the travel scale this path uses
+		RONGYUAN_NO_KEY_MAP,
+		RONGYUAN_START_REJECTED,
+	};
+
+	static void rongyuanSetup(AnalogueKeyboard& kbd)
+	{
+		memset(kbd.rongyuan.buffer, 0, sizeof(kbd.rongyuan.buffer));
+
+		const auto fail = [&kbd](RongyuanSetupState reason, const char* message)
+		{
+			if (kbd.rongyuan.state != reason)
+			{
+				logWriteLine(message);
+			}
+			kbd.rongyuan.state = reason;
+		};
+
+		if (!kbd.hid.hasReportId(RONGYUAN_INPUT_REPORT_ID))
+		{
+			fail(RONGYUAN_NO_REPORT_5, "RongYuan: setup could not find report 5 in the analogue collection; retrying.");
+			return;
+		}
+
+#if SOUP_WINDOWS
+		kbd.hid.increaseInputReportBufferCount();
+#endif
+
+		hwHid cmd = rongyuanCommandChannel(kbd.hid);
+		if (!cmd.isValid())
+		{
+			fail(RONGYUAN_NO_COMMAND_CHANNEL, "RongYuan: setup found no command collection on the keyboard; retrying.");
+			return;
+		}
+
+		const Buffer<> firmware_reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, RongyuanQuery{
+			.command = RONGYUAN_FIRMWARE_ID,
+		}));
+		if (firmware_reply.size() < 9)
+		{
+			fail(RONGYUAN_NO_FIRMWARE_ID, "RongYuan: setup did not read the firmware id; retrying.");
+			return;
+		}
+
+		// The 143 reply carries the firmware version as a little-endian pair at offset 7.
+		const uint16_t firmware = static_cast<uint16_t>(firmware_reply.data()[7]
+			| (firmware_reply.data()[8] << 8));
+		if (firmware < RONGYUAN_MIN_FIRMWARE)
+		{
+			fail(RONGYUAN_OLD_FIRMWARE, "RongYuan: the firmware predates the travel scale this path uses; the keyboard will report no keys.");
+			return;
+		}
+
+		if (!rongyuanIsMagnetic(cmd))
+		{
+			fail(RONGYUAN_NO_ANALOGUE_SWITCH, "RongYuan: the settings read found no analogue switch; the keyboard will report no keys.");
+			return;
+		}
+
+		if (!rongyuanReadKeyMap(cmd, kbd.rongyuan.layout))
+		{
+			fail(RONGYUAN_NO_KEY_MAP, "RongYuan: setup did not read the whole key map; retrying.");
+			return;
+		}
+
+		const RongyuanQuery query{
+			.command = RONGYUAN_MAGNETIC_AXIS_TRAVEL,
+			.arguments = { 0x01 },
+		};
+		if (!cmd.sendFeatureReport(rongyuanQueryBuffer(cmd, query)))
+		{
+			fail(RONGYUAN_START_REJECTED, "RongYuan: the keyboard did not accept the magnetic-axis start command; retrying.");
+			return;
+		}
+
+		kbd.rongyuan.state = RONGYUAN_READY;
+	}
+
+	static constexpr uint16_t RONGYUAN_FULL_TRAVEL = 810;
+
+	std::vector<ActiveKey> AnalogueKeyboard::getActiveKeysRongyuan()
+	{
+		std::vector<ActiveKey> keys{};
+
+		if (rongyuan.state != RONGYUAN_READY
+			&& rongyuan.state != RONGYUAN_NO_ANALOGUE_SWITCH
+			&& rongyuan.state != RONGYUAN_OLD_FIRMWARE
+			)
+		{
+			rongyuanSetup(*this);
+		}
+		if (rongyuan.state != RONGYUAN_READY)
+		{
+			return keys;
+		}
+
+		// Each report carries one key, so everything queued has to be read before the vector is current.
+		while (true)
+		{
+			const Buffer<>& report = hid.receiveReport();
+			SOUP_IF_UNLIKELY (report.empty())
+			{
+				disconnected = true;
+				return keys;
+			}
+			if (report.size() >= sizeof(RongyuanTravelReport))
+			{
+				RongyuanTravelReport travel_report;
+				memcpy(&travel_report, report.data(), sizeof(travel_report));
+				const size_t position = travel_report.position;
+				if (travel_report.marker == RONGYUAN_MAGNETIC_AXIS_TRAVEL
+					&& position < decltype(rongyuan)::RONGYUAN_POSITIONS)
+				{
+					const Key sk = rongyuan.layout[position];
+					if (sk != KEY_NONE)
+					{
+						rongyuan.buffer[sk] = travel_report.travel;
+					}
+				}
+			}
+			if (!hid.hasReport())
+			{
+				break;
+			}
+		}
+
+		for (size_t i = 0; i != NUM_KEYS; ++i)
+		{
+			if (rongyuan.buffer[i] != 0)
+			{
+				keys.emplace_back(ActiveKey{
+					static_cast<Key>(i),
+					std::min(static_cast<float>(rongyuan.buffer[i]) / RONGYUAN_FULL_TRAVEL, 1.0f)
+				});
+			}
+		}
 
 		return keys;
 	}
