@@ -319,11 +319,15 @@ NAMESPACE_SOUP
 	{
 		RONGYUAN_MAGNETIC_AXIS_TRAVEL = 0x1B,
 		RONGYUAN_KEY_MAP = 0x8A,
+		RONGYUAN_FIRMWARE_ID = 0x8F,
 		RONGYUAN_SETTINGS = 0xE5,
 	};
 
 	// The analogue collection's input report id; setup checks the descriptor declares it, and byte 1 tells reports apart.
 	static constexpr uint8_t RONGYUAN_INPUT_REPORT_ID = 5;
+	// The firmware generation the travel counts' scale belongs to: the vendor app's divisor rule
+	// treats 1280 and up as 0.005 mm per count, and older firmware on coarser scales.
+	static constexpr uint16_t RONGYUAN_MIN_FIRMWARE = 1280;
 	// The key map read asks for eight pages of sixteen four-byte records.
 	static constexpr size_t RONGYUAN_PAGES = 8;
 	static constexpr size_t RONGYUAN_RECORDS_PER_PAGE = 16;
@@ -1465,6 +1469,8 @@ if (combined[i]) \
 		RONGYUAN_NO_ANALOGUE_SWITCH, // terminal; the settings read found no analogue switch
 		RONGYUAN_NO_REPORT_5,
 		RONGYUAN_NO_COMMAND_CHANNEL,
+		RONGYUAN_NO_FIRMWARE_ID,
+		RONGYUAN_OLD_FIRMWARE, // terminal; the firmware predates the travel scale this path uses
 		RONGYUAN_NO_KEY_MAP,
 		RONGYUAN_START_REJECTED,
 	};
@@ -1499,6 +1505,24 @@ if (combined[i]) \
 			return;
 		}
 
+		const Buffer<> firmware_reply = rongyuanAsk(cmd, rongyuanQueryBuffer(cmd, RongyuanQuery{
+			.command = RONGYUAN_FIRMWARE_ID,
+		}));
+		if (firmware_reply.size() < 9)
+		{
+			fail(RONGYUAN_NO_FIRMWARE_ID, "RongYuan: setup did not read the firmware id; retrying.");
+			return;
+		}
+
+		// The 143 reply carries the firmware version as a little-endian pair at offset 7.
+		const uint16_t firmware = static_cast<uint16_t>(firmware_reply.data()[7]
+			| (firmware_reply.data()[8] << 8));
+		if (firmware < RONGYUAN_MIN_FIRMWARE)
+		{
+			fail(RONGYUAN_OLD_FIRMWARE, "RongYuan: the firmware predates the travel scale this path uses; the keyboard will report no keys.");
+			return;
+		}
+
 		if (!rongyuanIsMagnetic(cmd))
 		{
 			fail(RONGYUAN_NO_ANALOGUE_SWITCH, "RongYuan: the settings read found no analogue switch; the keyboard will report no keys.");
@@ -1530,7 +1554,10 @@ if (combined[i]) \
 	{
 		std::vector<ActiveKey> keys{};
 
-		if (rongyuan.state != RONGYUAN_READY && rongyuan.state != RONGYUAN_NO_ANALOGUE_SWITCH)
+		if (rongyuan.state != RONGYUAN_READY
+			&& rongyuan.state != RONGYUAN_NO_ANALOGUE_SWITCH
+			&& rongyuan.state != RONGYUAN_OLD_FIRMWARE
+			)
 		{
 			rongyuanSetup(*this);
 		}
